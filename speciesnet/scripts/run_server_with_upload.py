@@ -47,6 +47,21 @@ _HOST = flags.DEFINE_string(
     "0.0.0.0",
     "Host to run the server on.",
 )
+_WORKERS_PER_DEVICE = flags.DEFINE_integer(
+    "workers_per_device",
+    1,
+    "Number of server replicas per device.",
+)
+_TIMEOUT = flags.DEFINE_integer(
+    "timeout",
+    30,
+    "Timeout (in seconds) for requests.",
+)
+_BACKLOG = flags.DEFINE_integer(
+    "backlog",
+    2048,
+    "Maximum number of connections to hold in backlog.",
+)
 _MODEL = flags.DEFINE_string(
     "model",
     DEFAULT_MODEL,
@@ -264,9 +279,16 @@ class SpeciesNetServer:
         """Load the SpeciesNet model."""
         self.model = SpeciesNet(self.model_name, geofence=self.geofence)
 
-    def run(self, host: str = "0.0.0.0", port: int = 8000):
+    def run(self, host: str = "0.0.0.0", port: int = 8000, workers: int = 1, timeout: int = 30, backlog: int = 2048):
         """Run the server."""
-        uvicorn.run(self.app, host=host, port=port)
+        uvicorn.run(
+            self.app, 
+            host=host, 
+            port=port,
+            workers=workers,
+            timeout_keep_alive=timeout,
+            backlog=backlog
+        )
 
 
 def main(argv: list[str]) -> None:
@@ -283,7 +305,16 @@ def main(argv: list[str]) -> None:
     print("Model loaded successfully!")
     
     print(f"Starting server on {_HOST.value}:{_PORT.value}")
-    server.run(host=_HOST.value, port=_PORT.value)
+    print(f"Workers per device: {_WORKERS_PER_DEVICE.value}")
+    print(f"Timeout: {_TIMEOUT.value}s")
+    print(f"Backlog: {_BACKLOG.value}")
+    server.run(
+        host=_HOST.value, 
+        port=_PORT.value,
+        workers=_WORKERS_PER_DEVICE.value,
+        timeout=_TIMEOUT.value,
+        backlog=_BACKLOG.value
+    )
 
 
 if __name__ == "__main__":

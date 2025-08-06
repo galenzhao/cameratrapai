@@ -4,9 +4,25 @@
 
 ## 启动服务器
 
+### 基本启动
 ```bash
-python speciesnet/scripts/run_server_with_upload.py --port=8000 --model=your_model_name
+python speciesnet/scripts/run_server_with_upload.py
 ```
+
+### 自定义配置启动
+```bash
+python speciesnet/scripts/run_server_with_upload.py --port=8000 --workers_per_device=4 --model=your_model_name
+```
+
+### 主要参数
+- `--port`: 服务器端口（默认: 8000）
+- `--host`: 服务器主机（默认: 0.0.0.0）
+- `--workers_per_device`: 每个设备的worker数量（默认: 1）
+- `--timeout`: 请求超时时间，秒（默认: 30）
+- `--backlog`: 最大连接队列长度（默认: 2048）
+- `--model`: 模型名称
+- `--geofence`: 是否启用地理围栏（默认: True）
+- `--extra_fields`: 额外的字段列表，用逗号分隔
 
 ## API 接口
 
