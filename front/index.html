@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动物识别与标注</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            background-color: #fafafa;
+        }
+        
+        .upload-section.dragover {
+            border-color: #007bff;
+            background-color: #e3f2fd;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .upload-btn {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        
+        .upload-btn:hover {
+            background-color: #0056b3;
+        }
+        
+        .image-container {
+            position: relative;
+            display: inline-block;
+            margin: 20px auto;
+            text-align: center;
+        }
+        
+        #uploadedImage {
+            max-width: 100%;
+            max-height: 600px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .bbox {
+            position: absolute;
+            border: 3px solid #ff0000;
+            background-color: rgba(255, 0, 0, 0.1);
+            pointer-events: none;
+        }
+        
+        .bbox-label {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            background-color: #ff0000;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .prediction-item {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .prediction-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .prediction-score {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 10px;
+            background-color: #f8d7da;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .drag-text {
+            color: #666;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🦌 动物识别与标注系统</h1>
+        
+        <div class="upload-section" id="uploadSection">
+            <div class="drag-text">拖拽图片到此处或点击选择文件</div>
+            <input type="file" id="fileInput" accept="image/*">
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                选择图片
+            </button>
+        </div>
+        
+        <div id="imageContainer" class="image-container" style="display: none;">
+            <img id="uploadedImage" alt="上传的图片">
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            正在识别中，请稍候...
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="results" class="results" style="display: none;">
+            <h3>识别结果</h3>
+            <div id="predictionsList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/predict_upload';
+        
+        // 拖拽上传功能
+        const uploadSection = document.getElementById('uploadSection');
+        const fileInput = document.getElementById('fileInput');
+        
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('dragover');
+        });
+        
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('dragover');
+        });
+        
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showError('请选择图片文件');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                displayImage(e.target.result);
+                uploadImage(file);
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function displayImage(src) {
+            const imageContainer = document.getElementById('imageContainer');
+            const uploadedImage = document.getElementById('uploadedImage');
+            
+            uploadedImage.src = src;
+            imageContainer.style.display = 'block';
+            
+            // 清除之前的标注
+            clearBoundingBoxes();
+        }
+        
+        function clearBoundingBoxes() {
+            const bboxes = document.querySelectorAll('.bbox');
+            bboxes.forEach(bbox => bbox.remove());
+        }
+        
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            hideLoading();
+        }
+        
+        async function uploadImage(file) {
+            showLoading();
+            
+            const formData = new FormData();
+            formData.append('files', file);
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                processResults(data);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showError('上传失败: ' + error.message);
+            }
+        }
+        
+        function processResults(data) {
+            hideLoading();
+            
+            if (!data.predictions || data.predictions.length === 0) {
+                showError('未识别到任何结果');
+                return;
+            }
+            
+            const prediction = data.predictions[0];
+            
+            // 显示分类结果
+            displayPredictions(prediction.classifications);
+            
+            // 显示检测框
+            if (prediction.detections && prediction.detections.length > 0) {
+                displayBoundingBoxes(prediction.detections);
+            }
+            
+            document.getElementById('results').style.display = 'block';
+        }
+        
+        function displayPredictions(classifications) {
+            const predictionsList = document.getElementById('predictionsList');
+            predictionsList.innerHTML = '';
+            
+            classifications.classes.forEach((className, index) => {
+                const score = classifications.scores[index];
+                const percentage = (score * 100).toFixed(2);
+                
+                const predictionItem = document.createElement('div');
+                predictionItem.className = 'prediction-item';
+                
+                // 提取物种名称（最后一个分号后的内容）
+                const speciesName = className.split(';').pop();
+                
+                predictionItem.innerHTML = `
+                    <div class="prediction-name">${speciesName}</div>
+                    <div class="prediction-score">置信度: ${percentage}%</div>
+                `;
+                
+                predictionsList.appendChild(predictionItem);
+            });
+        }
+        
+        function displayBoundingBoxes(detections) {
+            const image = document.getElementById('uploadedImage');
+            const imageContainer = document.getElementById('imageContainer');
+            
+            // 等待图片加载完成
+            if (image.complete) {
+                drawBoundingBoxes(detections, image, imageContainer);
+            } else {
+                image.onload = () => {
+                    drawBoundingBoxes(detections, image, imageContainer);
+                };
+            }
+        }
+        
+        function drawBoundingBoxes(detections, image, container) {
+            const imageRect = image.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            
+            detections.forEach((detection, index) => {
+                const bbox = detection.bbox;
+                const confidence = (detection.conf * 100).toFixed(1);
+                
+                // 计算实际像素位置
+                const x = bbox[0] * image.naturalWidth;
+                const y = bbox[1] * image.naturalHeight;
+                const width = bbox[2] * image.naturalWidth;
+                const height = bbox[3] * image.naturalHeight;
+                
+                // 计算相对于显示图片的位置
+                const scaleX = imageRect.width / image.naturalWidth;
+                const scaleY = imageRect.height / image.naturalHeight;
+                
+                const displayX = x * scaleX;
+                const displayY = y * scaleY;
+                const displayWidth = width * scaleX;
+                const displayHeight = height * scaleY;
+                
+                // 创建边界框元素
+                const bboxElement = document.createElement('div');
+                bboxElement.className = 'bbox';
+                bboxElement.style.left = displayX + 'px';
+                bboxElement.style.top = displayY + 'px';
+                bboxElement.style.width = displayWidth + 'px';
+                bboxElement.style.height = displayHeight + 'px';
+                
+                // 创建标签
+                const labelElement = document.createElement('div');
+                labelElement.className = 'bbox-label';
+                labelElement.textContent = `${detection.label} ${confidence}%`;
+                
+                bboxElement.appendChild(labelElement);
+                container.appendChild(bboxElement);
+            });
+        }
+    </script>
+</body>
+</html>
