@@ -64,6 +64,7 @@
             display: inline-block;
             margin: 20px auto;
             text-align: center;
+            max-width: 100%;
         }
         
         #uploadedImage {
@@ -71,13 +72,16 @@
             max-height: 600px;
             border-radius: 8px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: block;
         }
         
         .bbox {
             position: absolute;
-            border: 3px solid #ff0000;
+            border: 2px solid #ff0000;
             background-color: rgba(255, 0, 0, 0.1);
             pointer-events: none;
+            box-sizing: border-box;
+            z-index: 10;
         }
         
         .bbox-label {
@@ -90,6 +94,37 @@
             border-radius: 3px;
             font-size: 12px;
             font-weight: bold;
+            white-space: nowrap;
+            z-index: 11;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .bbox {
+                border-width: 1px;
+            }
+            
+            .bbox-label {
+                font-size: 10px;
+                padding: 1px 4px;
+                top: -20px;
+            }
+            
+            #uploadedImage {
+                max-height: 400px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .bbox-label {
+                font-size: 9px;
+                padding: 1px 3px;
+                top: -18px;
+            }
+            
+            #uploadedImage {
+                max-height: 300px;
+            }
         }
         
         .results {
@@ -168,11 +203,34 @@
     </div>
 
     <script>
-        const API_URL = '/predict_upload';
+        const API_URL = 'http://3.236.80.155:8000/predict_upload';
+        
+        // 全局变量存储检测结果
+        let currentDetections = [];
+        let resizeTimeout;
         
         // 拖拽上传功能
         const uploadSection = document.getElementById('uploadSection');
         const fileInput = document.getElementById('fileInput');
+        
+        // 防抖函数
+        function debounce(func, wait) {
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(resizeTimeout);
+                    func(...args);
+                };
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(later, wait);
+            };
+        }
+        
+        // 添加窗口大小变化监听（带防抖）
+        window.addEventListener('resize', debounce(() => {
+            if (currentDetections.length > 0) {
+                redrawBoundingBoxes();
+            }
+        }, 250));
         
         uploadSection.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -221,6 +279,14 @@
             
             // 清除之前的标注
             clearBoundingBoxes();
+            currentDetections = [];
+            
+            // 图片加载完成后重新绘制标注框
+            uploadedImage.onload = () => {
+                if (currentDetections.length > 0) {
+                    redrawBoundingBoxes();
+                }
+            };
         }
         
         function clearBoundingBoxes() {
@@ -285,6 +351,7 @@
             
             // 显示检测框
             if (prediction.detections && prediction.detections.length > 0) {
+                currentDetections = prediction.detections;
                 displayBoundingBoxes(prediction.detections);
             }
             
@@ -328,9 +395,28 @@
             }
         }
         
+        function redrawBoundingBoxes() {
+            if (currentDetections.length > 0) {
+                clearBoundingBoxes();
+                const image = document.getElementById('uploadedImage');
+                const imageContainer = document.getElementById('imageContainer');
+                drawBoundingBoxes(currentDetections, image, imageContainer);
+            }
+        }
+        
         function drawBoundingBoxes(detections, image, container) {
+            // 确保图片已完全加载
+            if (!image.complete || image.naturalWidth === 0) {
+                setTimeout(() => drawBoundingBoxes(detections, image, container), 100);
+                return;
+            }
+            
             const imageRect = image.getBoundingClientRect();
-            const containerRect = container.getBoundingClientRect();
+            
+            // 确保图片容器有正确的定位
+            if (getComputedStyle(container).position === 'static') {
+                container.style.position = 'relative';
+            }
             
             detections.forEach((detection, index) => {
                 const bbox = detection.bbox;
