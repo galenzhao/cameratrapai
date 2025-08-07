@@ -172,6 +172,90 @@
             color: #666;
             margin: 10px 0;
         }
+        
+        .raw-data-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .raw-data-toggle {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 10px;
+            margin-right: 10px;
+        }
+        
+        .raw-data-toggle:hover {
+            background-color: #5a6268;
+        }
+        
+        .copy-data-btn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .copy-data-btn:hover {
+            background-color: #218838;
+        }
+        
+        .copy-data-btn:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .raw-data-content {
+            display: none;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.4;
+        }
+        
+        .raw-data-content.show {
+            display: block;
+        }
+        
+        .raw-data-content::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        .raw-data-content::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .raw-data-content::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        
+        .raw-data-content::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
     </style>
 </head>
 <body>
@@ -199,6 +283,18 @@
         <div id="results" class="results" style="display: none;">
             <h3>识别结果</h3>
             <div id="predictionsList"></div>
+            
+            <div class="raw-data-section">
+                <button class="raw-data-toggle" onclick="toggleRawData()">
+                    📋 显示/隐藏原始数据
+                </button>
+                <button class="copy-data-btn" onclick="copyRawData()" id="copyDataBtn" disabled>
+                    📋 复制原始数据
+                </button>
+                <div id="rawDataContent" class="raw-data-content">
+                    <div id="rawDataText"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -208,6 +304,7 @@
         // 全局变量存储检测结果
         let currentDetections = [];
         let resizeTimeout;
+        let currentRawData = null;
         
         // 拖拽上传功能
         const uploadSection = document.getElementById('uploadSection');
@@ -223,6 +320,36 @@
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(later, wait);
             };
+        }
+        
+        // 切换原始数据显示
+        function toggleRawData() {
+            const content = document.getElementById('rawDataContent');
+            const button = document.querySelector('.raw-data-toggle');
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                button.textContent = '📋 显示原始数据';
+            } else {
+                content.classList.add('show');
+                button.textContent = '📋 隐藏原始数据';
+            }
+        }
+        
+        // 格式化并显示原始数据
+        function displayRawData(data) {
+            currentRawData = data;
+            const rawDataText = document.getElementById('rawDataText');
+            const copyBtn = document.getElementById('copyDataBtn');
+            
+            try {
+                const formattedData = JSON.stringify(data, null, 2);
+                rawDataText.textContent = formattedData;
+                copyBtn.disabled = false;
+            } catch (error) {
+                rawDataText.textContent = '数据格式化失败: ' + error.message;
+                copyBtn.disabled = true;
+            }
         }
         
         // 添加窗口大小变化监听（带防抖）
@@ -281,6 +408,12 @@
             clearBoundingBoxes();
             currentDetections = [];
             
+            // 清除原始数据
+            currentRawData = null;
+            document.getElementById('copyDataBtn').disabled = true;
+            document.getElementById('rawDataContent').classList.remove('show');
+            document.querySelector('.raw-data-toggle').textContent = '📋 显示原始数据';
+            
             // 图片加载完成后重新绘制标注框
             uploadedImage.onload = () => {
                 if (currentDetections.length > 0) {
@@ -338,6 +471,9 @@
         
         function processResults(data) {
             hideLoading();
+            
+            // 显示原始数据
+            displayRawData(data);
             
             if (!data.predictions || data.predictions.length === 0) {
                 showError('未识别到任何结果');
@@ -453,6 +589,56 @@
                 bboxElement.appendChild(labelElement);
                 container.appendChild(bboxElement);
             });
+        }
+
+        // 复制原始数据到剪贴板
+        async function copyRawData() {
+            if (!currentRawData) {
+                alert('没有可复制的原始数据。');
+                return;
+            }
+            
+            const copyBtn = document.getElementById('copyDataBtn');
+            const originalText = copyBtn.textContent;
+            
+            try {
+                const dataToCopy = JSON.stringify(currentRawData, null, 2);
+                
+                // 使用现代Clipboard API
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(dataToCopy);
+                    copyBtn.textContent = '✅ 已复制';
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                    }, 2000);
+                } else {
+                    // 降级到传统方法
+                    const textArea = document.createElement('textarea');
+                    textArea.value = dataToCopy;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    textArea.style.top = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                        copyBtn.textContent = '✅ 已复制';
+                        setTimeout(() => {
+                            copyBtn.textContent = originalText;
+                        }, 2000);
+                    } catch (err) {
+                        console.error('复制失败:', err);
+                        alert('复制失败，请手动复制。');
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                }
+            } catch (error) {
+                console.error('复制失败:', error);
+                alert('复制失败: ' + error.message);
+            }
         }
     </script>
 </body>
