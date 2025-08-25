@@ -113,6 +113,21 @@
             #uploadedImage {
                 max-height: 400px;
             }
+            
+            .parameters-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .parameter-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            
+            .parameter-item input {
+                max-width: 100%;
+            }
         }
         
         @media (max-width: 480px) {
@@ -124,6 +139,14 @@
             
             #uploadedImage {
                 max-height: 300px;
+            }
+            
+            .parameters-section {
+                padding: 15px;
+            }
+            
+            .parameter-item input {
+                font-size: 16px; /* 防止iOS缩放 */
             }
         }
         
@@ -256,6 +279,79 @@
         .raw-data-content::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
+
+        /* 地理信息参数设置区域 */
+        .parameters-section {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+
+        .parameters-section h3 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .parameters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            justify-items: center;
+        }
+
+        .parameter-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .parameter-item label {
+            font-weight: bold;
+            color: #555;
+            font-size: 14px;
+        }
+
+        .parameter-item input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 14px;
+            width: 100%;
+            max-width: 200px;
+        }
+
+        .parameter-item input[type="number"] {
+            width: 120px; /* 调整数字输入框宽度 */
+        }
+        
+        .parameters-display {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #e8f4fd;
+            border-radius: 8px;
+            border: 1px solid #bee5eb;
+        }
+        
+        .parameters-display h4 {
+            margin: 0 0 10px 0;
+            color: #0c5460;
+            font-size: 14px;
+        }
+        
+        .parameters-display .parameter-item {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+        
+        .parameters-display .parameter-item span {
+            font-weight: bold;
+            color: #0c5460;
+        }
     </style>
 </head>
 <body>
@@ -270,12 +366,41 @@
             </button>
         </div>
         
+        <!-- 地理信息参数设置区域 -->
+        <div class="parameters-section">
+            <h3>地理信息参数（可选）</h3>
+            <div class="parameters-grid">
+                <div class="parameter-item">
+                    <label for="country">国家代码:</label>
+                    <input type="text" id="country" placeholder="例如: USA, CHN, GBR" maxlength="3">
+                </div>
+                <div class="parameter-item">
+                    <label for="admin1_region">行政区代码:</label>
+                    <input type="text" id="admin1_region" placeholder="例如: CA, NY, 北京" maxlength="10">
+                </div>
+                <div class="parameter-item">
+                    <label for="latitude">纬度:</label>
+                    <input type="number" id="latitude" placeholder="例如: 37.7749" step="any" min="-90" max="90">
+                </div>
+                <div class="parameter-item">
+                    <label for="longitude">经度:</label>
+                    <input type="number" id="longitude" placeholder="例如: -122.4194" step="any" min="-180" max="180">
+                </div>
+            </div>
+        </div>
+        
         <div id="imageContainer" class="image-container" style="display: none;">
             <img id="uploadedImage" alt="上传的图片">
         </div>
         
         <div id="loading" class="loading" style="display: none;">
             正在识别中，请稍候...
+        </div>
+        
+        <!-- 参数显示区域 -->
+        <div id="parametersDisplay" class="parameters-display" style="display: none;">
+            <h4>当前使用的参数:</h4>
+            <div id="parametersList"></div>
         </div>
         
         <div id="error" class="error" style="display: none;"></div>
@@ -391,10 +516,56 @@
             
             const reader = new FileReader();
             reader.onload = function(e) {
+                // 先获取参数值，再显示图片
+                const country = document.getElementById('country').value.trim();
+                const admin1Region = document.getElementById('admin1_region').value.trim();
+                const latitude = document.getElementById('latitude').value.trim();
+                const longitude = document.getElementById('longitude').value.trim();
+                
+                const parameters = { country, admin1Region, latitude, longitude };
+                
                 displayImage(e.target.result);
-                uploadImage(file);
+                displayParameters(parameters);
+                uploadImage(file, parameters);
             };
             reader.readAsDataURL(file);
+        }
+        
+        // 清除地理信息参数
+        function clearParameters() {
+            document.getElementById('country').value = '';
+            document.getElementById('admin1_region').value = '';
+            document.getElementById('latitude').value = '';
+            document.getElementById('longitude').value = '';
+        }
+        
+        // 显示当前使用的参数
+        function displayParameters(parameters) {
+            const parametersDisplay = document.getElementById('parametersDisplay');
+            const parametersList = document.getElementById('parametersList');
+            
+            // 过滤出有值的参数
+            const validParameters = {};
+            if (parameters.country) validParameters.country = parameters.country;
+            if (parameters.admin1Region) validParameters.admin1Region = parameters.admin1Region;
+            if (parameters.latitude) validParameters.latitude = parameters.latitude;
+            if (parameters.longitude) validParameters.longitude = parameters.longitude;
+            
+            if (Object.keys(validParameters).length === 0) {
+                parametersDisplay.style.display = 'none';
+                return;
+            }
+            
+            // 显示参数
+            parametersList.innerHTML = '';
+            Object.entries(validParameters).forEach(([key, value]) => {
+                const paramItem = document.createElement('div');
+                paramItem.className = 'parameter-item';
+                paramItem.innerHTML = `<span>${key}:</span> ${value}`;
+                parametersList.appendChild(paramItem);
+            });
+            
+            parametersDisplay.style.display = 'block';
         }
         
         function displayImage(src) {
@@ -413,6 +584,8 @@
             document.getElementById('copyDataBtn').disabled = true;
             document.getElementById('rawDataContent').classList.remove('show');
             document.querySelector('.raw-data-toggle').textContent = '📋 显示原始数据';
+            
+            // 注意：不再清除地理信息参数，保持用户填写的内容
             
             // 图片加载完成后重新绘制标注框
             uploadedImage.onload = () => {
@@ -444,11 +617,32 @@
             hideLoading();
         }
         
-        async function uploadImage(file) {
+        async function uploadImage(file, parameters = {}) {
             showLoading();
             
             const formData = new FormData();
             formData.append('files', file);
+            
+            // 使用传入的参数，只有当参数有值时才添加到请求中
+            if (parameters.country) {
+                formData.append('country', parameters.country);
+            }
+            if (parameters.admin1Region) {
+                formData.append('admin1_region', parameters.admin1Region);
+            }
+            if (parameters.latitude) {
+                formData.append('latitude', parameters.latitude);
+            }
+            if (parameters.longitude) {
+                formData.append('longitude', parameters.longitude);
+            }
+            
+            // 调试：在控制台输出实际发送的参数
+            console.log('发送的参数:', parameters);
+            console.log('FormData内容:');
+            for (let [key, value] of formData.entries()) {
+                console.log(key + ':', value);
+            }
             
             try {
                 const response = await fetch(API_URL, {
@@ -640,6 +834,30 @@
                 alert('复制失败: ' + error.message);
             }
         }
+        
+        // 添加参数输入框的事件监听器，实时更新参数显示
+        document.addEventListener('DOMContentLoaded', function() {
+            const countryInput = document.getElementById('country');
+            const admin1RegionInput = document.getElementById('admin1_region');
+            const latitudeInput = document.getElementById('latitude');
+            const longitudeInput = document.getElementById('longitude');
+            
+            function updateParametersDisplay() {
+                const parameters = {
+                    country: countryInput.value.trim(),
+                    admin1Region: admin1RegionInput.value.trim(),
+                    latitude: latitudeInput.value.trim(),
+                    longitude: longitudeInput.value.trim()
+                };
+                displayParameters(parameters);
+            }
+            
+            // 为每个输入框添加事件监听器
+            countryInput.addEventListener('input', updateParametersDisplay);
+            admin1RegionInput.addEventListener('input', updateParametersDisplay);
+            latitudeInput.addEventListener('input', updateParametersDisplay);
+            longitudeInput.addEventListener('input', updateParametersDisplay);
+        });
     </script>
 </body>
 </html>

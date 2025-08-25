@@ -28,7 +28,8 @@ from pathlib import Path
 from absl import app
 from absl import flags
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 import PIL.Image
 import numpy as np
@@ -112,6 +113,11 @@ def _create_app_for_workers():
 def create_app():
     """Create and configure the FastAPI application."""
     app = FastAPI(title="SpeciesNet API", version="1.0.0")
+    
+    # Mount static files
+    front_dir = Path(__file__).parent.parent.parent / "front"
+    if front_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(front_dir)), name="static")
     
     # Global model instance
     model = None
@@ -281,6 +287,13 @@ def create_app():
                 except:
                     pass
             raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/")
+    async def root():
+        """Redirect root path to index.html."""
+        return RedirectResponse(url="/static/index.html")
+
+
 
     @app.get("/health")
     async def health_check():
